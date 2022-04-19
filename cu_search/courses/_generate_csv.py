@@ -6,10 +6,10 @@ import csv
 from alive_progress import alive_bar
 
 LINK = "https://catalog.colorado.edu/courses-a-z/"
-cwd = os.getcwd()
+CWD = os.getcwd()
 
 # Empty the big csv file on execution so that it doesn't become enormous by accident
-with open(cwd + "/courses/*.csv", "w") as f:
+with open(CWD + "/courses/*.csv", "w") as f:
     pass
 
 # Get links to all course subject pages
@@ -67,13 +67,13 @@ with alive_bar(len(links)) as bar:
         courses = [[codes[j], names[j], descs[j]] for j in range(len(codes))]
 
         # Write courses to subject csv file
-        with open(cwd + "/courses/" + subjects[i] + ".csv", "w") as f:
+        with open(CWD + "/courses/" + subjects[i] + ".csv", "w") as f:
             csvwriter = csv.writer(f)
             for c in courses:
                 csvwriter.writerow(c)
         
         # Append courses to main csv file
-        with open(cwd + "/courses/*.csv", "a") as f:
+        with open(CWD + "/courses/*.csv", "a") as f:
             csvwriter = csv.writer(f)
             for c in courses:
                 csvwriter.writerow(c)
