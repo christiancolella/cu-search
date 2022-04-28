@@ -14,7 +14,7 @@ import utils
 NAME = config.get("database", {}).get("name")                   # Load config
 WORDS_PATH = config.get("words_path", "")
 DICT_PATH = config.get("dictionary_path", "")
-DATABASE_PATH = NAME + config.get("database", {}).get(
+DATABASE_PATH = NAME + "/" + config.get("database", {}).get(
     "filepath", "")
 
 def generate_dictionary():
@@ -166,8 +166,8 @@ def generate_terms():
         json.dump(terms, f, sort_keys=True, indent=4)
 
 
-def generate_matrix(csv_filepath, col_weights):
-    """Generate uncompressed terms x documents matrix"""
+def generate_matrices(csv_filepath, col_weights):
+    """Generate uncompressed terms x documents matrix and term comparison matrix"""
 
     if os.path.isfile(csv_filepath):
         with open(csv_filepath, "r") as f:                      # Load database from csv file
@@ -187,7 +187,7 @@ def generate_matrix(csv_filepath, col_weights):
             + "/terms.json" + "\'")
         exit()
 
-    matrix = np.zeros([len(terms), len(documents)])             # Allocate space for matrix
+    td_matrix = np.zeros([len(terms), len(documents)])          # Allocate space for term x doc matrix
 
     if os.path.isfile(DICT_PATH):
         with open(DICT_PATH, "r") as f:                         # Load dictionary of root words
@@ -209,25 +209,36 @@ def generate_matrix(csv_filepath, col_weights):
                 for w in words:
                     root = root_lookup.get(w, w)                # Get root word
                     if len(root) > 1:
-                        count = matrix[terms.index(root), i]    # Add weighted count according to by column
+                        count = td_matrix[terms.index(root), i] # Add weighted count according to by column
                         count += col_weights[j]                 # according to 'col_weights'
-                        matrix[terms.index(root), i] = count
+                        td_matrix[terms.index(root), i] = count
             
             bar()
 
     weights = np.zeros([len(terms), len(terms)])                # Divide each term by its frequency in the
     for i, term in enumerate(terms):                            # database in order to rank its importance
         weights[i, i] = 1 / float(freq.get(term))
-    matrix = np.matmul(weights, matrix)
+    td_matrix = np.matmul(weights, td_matrix)
+    temp_matrix = preprocessing.normalize(td_matrix, axis=1)
 
-    matrix = preprocessing.normalize(matrix, axis=0)            # Normalize the columns of the matrix
+    td_matrix = preprocessing.normalize(td_matrix, axis=0)      # Normalize the columns of the matrix
 
-    output_path = NAME + "/matrices/A.pickle"
-    if not utils.path_exists(output_path):
+    output_path = NAME + "/mat/td/a.pickle"                     # Create directory for term x doc matrix  
+    if not utils.path_exists(output_path):                      # if it doesn't already exist
         utils.make_path(output_path)
     
-    with open(output_path, "wb") as f:                          # Output to binary file
-        pickle.dump(matrix, f)
+    with open(output_path, "wb") as f:                          # Output term x doc matrix to binary file
+        pickle.dump(td_matrix, f)
+
+    tt_matrix = np.matmul(temp_matrix, temp_matrix.T)           # Create term comparison matrix
+    print(tt_matrix[0:3, 0:3])
+
+    output_path = NAME + "/mat/tt/a.pickle"                     # Create directory for term comp matrix  
+    if not utils.path_exists(output_path):                      # if it doesn't already exist
+        utils.make_path(output_path)
+
+    with open(output_path, "wb") as f:                          # Output term comp matrix to binary file
+        pickle.dump(tt_matrix, f)
 
 
 def incomplete_svd(matrix, k):
@@ -273,22 +284,45 @@ def incomplete_svd(matrix, k):
 
     return U, SIGMA, V
 
-def compress(matrix_filepath, rank):
-    """Compress a matrix to a specified rank with the incomplete SVD"""
+def compress(matrix_filepath, rank, type):
+    """Compress a matrix to a specified rank with the incomplete SVD.
+    'type' can be either 'td' or 'tt'."""
 
-    with open(matrix_filepath, "rb") as f:                      # Load matrix from file
-        A = pickle.load(f)
+    if os.path.isfile(matrix_filepath):
+        with open(matrix_filepath, "rb") as f:                  # Load matrix from file
+            A = pickle.load(f)
+    else:
+        print("Error: No file found at: \'" + matrix_filepath
+            + "\'")
 
     print("Calculating SVD factorization...")                   # Compute incomplete SVD
     U, S, V = incomplete_svd(A, rank)
 
-    output_path = NAME + "/matrices/a.txt"
-    if not utils.path_exists(output_path):
-        utils.make_path(output_path)
+    if type == "td":
+        output_path = NAME + "/mat/td/"
+    if type == "tt":
+        output_path = NAME + "/mat/tt/"
+    else:
+        print("Error: Invalid type. Must be either 'td' or 'tt'.")
+        return
+    
+    if not utils.path_exists(output_path + "a.txt"):            # Create folder if it doesn't exist
+        utils.make_path(output_path + "a.txt")
 
-    with open(NAME + "/matrices/U.pickle", "wb") as f:          # Output matrix factors to binary files
+    with open(output_path + "u.pickle", "wb") as f:             # Output matrix factors to binary files
         pickle.dump(U, f)
-    with open(NAME + "/matrices/SIGMA.pickle", "wb") as f:
+    with open(output_path + "s.pickle", "wb") as f:
         pickle.dump(S, f)
-    with open(NAME + "/matrices/V.pickle", "wb") as f:
+    with open(output_path + "v.pickle", "wb") as f:
         pickle.dump(V, f)
+
+def main():
+    """Setup from config"""
+    
+    # generate_dictionary()
+    # generate_terms()
+    # generate_matrices(DATABASE_PATH, [0, 1, 1])
+    # compress("cu_search/mat/td/a.pickle", 100, "td")
+    # compress("cu_search/mat/tt/a.pickle", 100, "tt")
+
+main()
