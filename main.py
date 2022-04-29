@@ -17,7 +17,7 @@ class IR:
 
         if os.path.isdir(NAME):                                 # Attempt to load matrix factors
 
-            if os.path.isdir(NAME + "/mat/td"):                 # Terms x documents
+            if os.path.isdir(NAME + "/mat/td"):                 # Database matrix
                 temp_path = NAME + "/mat/td/"
 
                 u_exists = os.path.isfile(temp_path + "u.pickle")
@@ -38,7 +38,7 @@ class IR:
                 print("Error: Matrices do not exist.")
                 exit()
             
-            if os.path.isdir(NAME + "/mat/tt"):                 # Term comparison
+            if os.path.isdir(NAME + "/mat/tt"):                 # Thesaurus matrix
                 temp_path = NAME + "/mat/tt/"
 
                 u_exists = os.path.isfile(temp_path + "u.pickle")
@@ -81,7 +81,7 @@ class IR:
                     + "/terms.json\'")
             exit()
 
-        if os.path.isfile(DATABASE_PATH):                       # Load and set documents from database
+        if os.path.isfile(DATABASE_PATH):                       # Load and set documents from database file
             with open(DATABASE_PATH, "r") as f:
                 csvreader = csv.reader(f)
                 self.documents = list(csvreader)
@@ -95,7 +95,6 @@ class IR:
         """Convert a string query into a unit vector of term frequencies"""
 
         Q = np.zeros([len(self.terms), 1])                      # Allocate space for query vector
-        TEMP = np.zeros([len(self.terms), 1])                   # and temp query vector
         
         query = re.sub(r"\'s?", "", str(query).lower())         # Trim non-alphabetic characters from input.
         query = re.sub(r"[^\w]|\d|_", " ", query)               # This is the same procedure used to
@@ -114,7 +113,8 @@ class IR:
                     pass                                        # in terms list
 
         """
-        for i in range(len(Q)):                                 # Compute term comparison
+        TEMP = np.zeros([len(self.terms), 1])                   # Allocate temp query vector
+        for i in range(len(Q)):                                 # Apply thesaurus
             V = np.matmul(self.tt_V[i, :], self.tt_S)           # This is space efficient but very slow
             W = np.matmul(self.tt_U.T, Q)
             TEMP[i, 0] = np.dot(V, W)
@@ -123,13 +123,13 @@ class IR:
         """
 
         A = np.matmul(self.tt_U, 
-            np.matmul(self.tt_S, self.tt_V.T))                  # Compute term comparison
+            np.matmul(self.tt_S, self.tt_V.T))                  # Apply thesaurus
         for i, row in enumerate(A):                             # This is fast but not space efficient
             row[i] = 1.0                                        # Force diagonal entries to be 1
         Q = np.matmul(A, Q)
         
         """
-        with open("cu_search/mat/tt/" + "a.pickle", "rb") as f: # Use uncompressed term comparison matrix
+        with open("cu_search/mat/tt/" + "a.pickle", "rb") as f: # Use uncompressed thesaurus matrix
             A = pickle.load(f)
         Q = np.matmul(A, Q)
         """
@@ -144,9 +144,9 @@ class IR:
             + " results for \"" + query + "\":")
         
         Q = self.format_query(query)                            # Format query as vector
-        # COS = np.zeros(len(Q))                                # Allocate space for cosines
 
         """
+        COS = np.zeros(len(Q))                                  # Allocate space for cosines
         for i in range(len(A.shape[1])):                        # Compute cosines
             V = np.matmul(self.td_V[i, :], self.td_S)           # This is space efficient but very slow
             W = np.matmul(self.td_U.T, Q)
@@ -157,7 +157,7 @@ class IR:
             np.matmul(self.td_S, self.td_V.T))                  # Compute cosines
 
         """
-        with open("cu_search/mat/td/" + "a.pickle", "rb") as f: # Use uncompressed term x doc matrix
+        with open("cu_search/mat/td/" + "a.pickle", "rb") as f: # Use uncompressed database matrix
             A = pickle.load(f)
         """
 
@@ -170,7 +170,7 @@ class IR:
             if COS[r] > 0.01:
                 result = self.documents[r]
                 print(str(i + 1) + ") " + result[0]
-                    + " - " + result[1] + "; " + str(round(COS[r], 3)))
+                    + " - " + result[1])
             else:
                 print("-- No more matches --")
                 break
@@ -180,6 +180,6 @@ class IR:
 
 def main():
     ir = IR(cfg)                                                # Create information retrieval object
-    ir.search("linear algebra", 15)                             # Make search here
+    ir.search("linear algebra", 10)                             # Make search here
 
 main()
